@@ -197,13 +197,9 @@ cleanup_thread = threading.Thread(target=cleanup_old_requests, daemon=True)
 cleanup_thread.start()
 
 def get_models():
-    # ollama_service = OllamaService()
     custom_model_names = [{'model':'qwen2.5:latest', 'description':'latest and powerful', 'name':'qwen2.5'},
                           {'model':'gemma3:12b', 'description':'smart and talkative', 'name':'gemma3'},
                           {'model':'deepseek-r1:8b', 'description':'reasoning model', 'name':'deepseek-r1'},
                           {'model':'llama3:latest', 'description':'matured and robust', 'name':'llama3'},
                           {'model':'mistral:latest', 'description':'sincere and descriptive', 'name':'mistral'}]
-    # models = ollama_service.get_models()
-    # for model in models:
-    #     if model.model.startswith('llama')
     return custom_model_names

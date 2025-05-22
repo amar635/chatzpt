@@ -51,7 +51,7 @@ def generate_tor():
             
             thread = threading.Thread(
                 target=process_task_queue,
-                args=(task_id, context, current_app)
+                args=(task_id, context, current_app._get_current_object()) # type: ignore
             )
             
             thread.daemon = True
@@ -251,8 +251,12 @@ def translate():
 #     return {"error": "Please check the recaptcha"}, 400 
 
 def get_models():
-    ollama_service = OllamaService()
-    return ollama_service.get_models()
+    custom_model_names = [{'model':'qwen2.5:latest', 'description':'latest and powerful', 'name':'qwen2.5'},
+                          {'model':'gemma3:12b', 'description':'smart and talkative', 'name':'gemma3'},
+                          {'model':'deepseek-r1:8b', 'description':'reasoning model', 'name':'deepseek-r1'},
+                          {'model':'llama3:latest', 'description':'matured and robust', 'name':'llama3'},
+                          {'model':'mistral:latest', 'description':'sincere and descriptive', 'name':'mistral'}]
+    return custom_model_names
 
 
 def process_document_task(file_data, file_name, task_id, app):

@@ -56,15 +56,51 @@
     </div>
       </div>
 </div>
-<div class="fixed-bottom">
+<div class="fixed-bottom mb-2">
     <div class="container">
         <div class="justify-content-center">
-            <textarea class="form-control" rows="5" cols="100" placeholder="Enter your text here..." id="userInput"></textarea>
-            <div class="d-flex justify-content-center">
+            <div class="position-relative">
+                <textarea class="form-control" rows="5" cols="100" placeholder="Enter your text here..." id="userInput"></textarea>
+                <div class="container position-absolute bottom-0 end-0 p-0">
+                    <div class="d-flex justify-content-between mb-2">
+                        <div class="ms-auto d-flex me-2">
+                            <div class="dropdown me-2">
+                                <button class="btn btn-sm btn-outline-secondary dropdown-toggle rounded-5" type="button"
+                                    id="dropdownPreferredModel" data-bs-toggle="dropdown" aria-expanded="false">
+                                    Select Model
+                                </button>
+                                <ul class="dropdown-menu" aria-labelledby="dropdownPreferredModel" id="dropdownModel">
+                                    {% for item in models %}
+                                    <li>
+                                        <a href="#" class="dropdown-item">
+                                            <span style="font-size:0.8rem;" class="d-none">{{item['model']}}</span>
+                                            <span class="d-inline-block w-100">{{item['name']}}</span>
+                                            <span style="font-size:0.8rem;" class="d-block text-muted">{{item['description']}}</span>
+                                        </a>
+                                    </li>
+                                    {% endfor %}
+                                </ul>
+                                <input type="hidden" id="selectedModel" name="selectedModel" value="">
+                            </div>
+                            {#<!-- <select class="form-select me-2" aria-label="Default select example" id="preferredModel"
+                                style="width:170px;">
+                                <option selected disabled>Select Model</option>
+                                {% for item in models %}
+                                <option value="{{loop.index}}">{{item['name']}}</option>
+                                {% endfor %}
+                            </select> -->#}
+                            <button type="submit" class="btn btn-sm btn-secondary postion-relative" id="submitBtn" name="submitBtn" disabled><i
+                                    class="fa-solid fa-location-arrow" style="transform: rotate(45deg);"></i></button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- <div class="d-flex justify-content-center">
                 <button type="button" class="btn btn-primary my-3 mx-auto" name="submitBtn" id="submitBtn">
                     Submit Context
                 </button>
-            </div>
+            </div> -->
         </div>
     </div>
 </div>
@@ -74,24 +110,190 @@
     document.addEventListener('DOMContentLoaded', () => {
         const submitBtn = document.getElementById('submitBtn');
         const userInput = document.getElementById('userInput');
-        const selectModel = document.getElementById('selectModel');
+        const selectedModelInput = document.getElementById('selectedModel');
         const typingIndicator = document.getElementById('typing-indicator');
         const spinnerDiv = document.getElementById('spinnerDiv');
         const progressBar = document.getElementById('progressBar');
         const progressContainer = document.getElementById('progressContainer');
         const statusTextElement = document.getElementById('statusText');
+        const dropdownModelItems = document.querySelectorAll('#dropdownModel .dropdown-item');
+        const dropdownPreferredModel = document.getElementById('dropdownPreferredModel');
 
+        // Initialize
+        let initialIndex = dropdownPreferredModel.textContent.trim();
+        // FUNCTIONS
         function scrollToBottom() {
             chatMessages.scrollTop = chatMessages.scrollHeight;
         }
+        function startProgressMonitoring(taskId) {
+        // Close any existing event source
+        if (eventSource) {
+            eventSource.close();
+        }
+        
+        // Create a new event source for SSE
+        eventSource = new EventSource('/tools/progress/' + taskId);
+        
+        eventSource.onmessage = function(event) {
+            const data = JSON.parse(event.data);
+            
+            if (data.error) {
+                // showError(data.error);
+                eventSource.close();
+            } else if (data.progress !== undefined) {
+                typingIndicator.classList.add('d-none');
+                updateProgress(data.progress, data.status || 'Processing...');
+
+                // If processing is complete, initiate download
+                if (data.progress === 100) {
+                    eventSource.close();
+                    setTimeout(function() {
+                        downloadFile(taskId);
+                    }, 1000); // Short delay to ensure processing is complete
+                }
+            }
+        };
+        
+        eventSource.onerror = function() {
+            // showError('Error connecting to server for progress updates.');
+            eventSource.close();
+        };
+    }
+
+        function updateProgress(percent, statusText) {
+            const progressBar = document.getElementById('progressBar');
+            // const statusTextElement = document.getElementById('statusText');
+            
+            if (progressBar ) {
+                progressBar.style.width = percent + '%';
+                progressBar.textContent = percent + '%';
+                progressBar.setAttribute('aria-valuenow', percent);
+                statusTextElement.textContent = statusText || '';
+            }
+        }
+        
+        function downloadFile(taskId) {
+            fetch('/tools/download/' + taskId)
+                .then(response => {
+                    const contentDisposition = response.headers.get("Content-Disposition");
+                    let filename = "processed_document.docx";
+                    if (contentDisposition) {
+                        const match = contentDisposition.match(/filename[^;=\n]*=(['"]?)(.*?)\1/);
+                        if (match) {
+                            let tmp_filename = match.input.split("filename=")[1]?.split(";")[0]?.trim();
+                            if (tmp_filename) {
+                                filename = tmp_filename.replace(/["']/g, '');
+                            }
+                        }
+                    }
+                    return response.blob().then(blob => ({blob, filename}));
+                })
+                .then(({blob, filename}) => {
+                    // Reset UI
+                    spinnerDiv.classList.add('visually-hidden');
+                    // uploadDocument.classList.remove('visually-hidden');
+                    typingIndicator.classList.add('d-none');
+                    progressContainer.classList.add('visually-hidden');
+                    
+                    // Hide progress container
+                    // const progressContainer = document.getElementById('progressContainer');
+                    // if (progressContainer) {
+                    //     progressContainer.classList.add('visually-hidden');
+                    // }
+                    
+                    // Create download link
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = filename;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    window.URL.revokeObjectURL(url);
+                    
+                    // Clean up on server
+                    setTimeout(function() {
+                        fetch('/tools/cleanup/' + taskId, {
+                            method: 'POST'
+                        });
+                    }, 3000);
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    // showError('Error downloading the file.');
+                });
+        }
+    
+        // Function to toggle submit button
+        function toggleSubmitBtn(){
+            if (userInput.value==='' || dropdownPreferredModel.textContent.trim() === 'Select Model'){
+                submitBtn.setAttribute('disabled', true);
+                submitBtn.classList.add('btn-secondary');
+                submitBtn.classList.remove('btn-primary');
+            } else {
+                submitBtn.removeAttribute('disabled');
+                submitBtn.classList.remove('btn-secondary');
+                submitBtn.classList.add('btn-primary');
+            }
+        }
+
+        // Function to adjust the textarea (userInput) height 
+        const adjustHeight = () => {
+                // Reset height to auto to get the correct scrollHeight
+                userInput.style.height = 'auto';
+                const element = document.querySelector('div.ms-auto.d-flex.me-2');
+                let div_height = 0;
+                if (element) {
+                    div_height = element.offsetHeight;
+                }
+                // Set the height to match content (scrollHeight)
+                userInput.style.height = userInput.scrollHeight + div_height + 'px';
+            };
+
+        // EVENT LISTENERS
+        // event listener to adjust the height of the userInput
+        userInput.addEventListener('keyup', (event) => {
+            toggleSubmitBtn();
+            if (event.keyCode == 13 && event.shiftKey) {
+                event.preventDefault();
+                userInput.value += '\n';
+            } else if (event.keyCode == 13) {
+                if (dropdownPreferredModel.textContent.trim() === 'Select Model') {
+                    event.preventDefault();
+                    return;
+                }
+                sendMessage();
+            } 
+            adjustHeight();
+        });
+
+        // event listener to handle dropdown menu button click
+        dropdownModelItems.forEach(item => {
+            item.addEventListener('click', function(e) {
+                e.preventDefault(); // Prevent the default anchor behavior
+                
+                // Get the model name from the first span
+                const modelName = this.querySelector('span.d-none').textContent;
+                const displayName = this.querySelector('span.d-inline-block').textContent;
+                
+                // Update the dropdown button text
+                dropdownPreferredModel.textContent = displayName;
+                toggleSubmitBtn();
+                
+                // Store the selected model in hidden input
+                selectedModelInput.value = modelName
+                model_name = modelName;
+            });
+        });
 
         submitBtn.addEventListener('click', (event) => {
             event.preventDefault();
             const message = userInput.value.trim();
                 if (!message) return;
             userInput.value = '';
-            const model_name = selectModel.options[selectModel.selectedIndex].text;
-                if (model_name ==='Select Model') return;
+            adjustHeight();
+            // const model_name = selectModel.options[selectModel.selectedIndex].text;
+            //     if (model_name ==='Select Model') return;
             
             typingIndicator.classList.remove('d-none');
             spinnerDiv.classList.remove('visually-hidden');
@@ -114,7 +316,7 @@
             const xhr = new XMLHttpRequest();
 
             // Configure it: POST-request for the URL /tor
-            xhr.open("POST", "/tor", true);
+            xhr.open("POST", "/tools/tor", true);
 
             // Set the Content-Type header to application/json
             xhr.setRequestHeader("Content-Type", "application/json");
@@ -157,149 +359,11 @@
 
             // Send the JSON data to the server
             xhr.send(jsonString);
-            // fetch('/tor', {
-            //         method: 'POST',
-            //         headers: {
-            //             'Content-Type': 'application/json',
-            //         },
-            //         body: JSON.stringify({ message: message, model: model_name })
-            //     }).then(response => {
-            //         // Hide typing indicator
-            //         typingIndicator.classList.add('d-none');
-            //         chatMessages.appendChild(messageDiv);
-                    
-            //         const reader = response.body.getReader();
-            //         const decoder = new TextDecoder();
-            //         let botMessage = '';
-                    
-            //         function readStream() {
-            //             return reader.read().then(({ done, value }) => {
-            //                 if (done) {
-            //                     // Apply markdown formatting
-            //                     messageContent.innerHTML = marked.parse(botMessage);
-            //                     return;
-            //                 }
-                            
-            //                 const chunk = decoder.decode(value);
-            //                 botMessage += chunk;
-            //                 messageContent.innerHTML = marked.parse(botMessage);
-            //                 scrollToBottom();
-                            
-            //                 return readStream();
-            //             });
-            //         }
-                    
-            //         return readStream();
-            //     })
-            //     .catch(error => {
-            //         console.error('Error:', error);
-            //         typingIndicator.classList.add('d-none');
-            //         // addMessage('Sorry, there was an error processing your request.', 'bot');
-            //     });
-
         });
     
         let eventSource = null;
 
-        function startProgressMonitoring(taskId) {
-        // Close any existing event source
-        if (eventSource) {
-            eventSource.close();
-        }
-        
-        // Create a new event source for SSE
-        eventSource = new EventSource('/progress/' + taskId);
-        
-        eventSource.onmessage = function(event) {
-            const data = JSON.parse(event.data);
-            
-            if (data.error) {
-                // showError(data.error);
-                eventSource.close();
-            } else if (data.progress !== undefined) {
-                typingIndicator.classList.add('d-none');
-                updateProgress(data.progress, data.status || 'Processing...');
-
-                // If processing is complete, initiate download
-                if (data.progress === 100) {
-                    eventSource.close();
-                    setTimeout(function() {
-                        downloadFile(taskId);
-                    }, 1000); // Short delay to ensure processing is complete
-                }
-            }
-        };
-        
-        eventSource.onerror = function() {
-            // showError('Error connecting to server for progress updates.');
-            eventSource.close();
-        };
-    }
-
-        function updateProgress(percent, statusText) {
-            const progressBar = document.getElementById('progressBar');
-            // const statusTextElement = document.getElementById('statusText');
-            
-            if (progressBar ) {
-                progressBar.style.width = percent + '%';
-                progressBar.textContent = percent + '%';
-                progressBar.setAttribute('aria-valuenow', percent);
-                statusTextElement.textContent = statusText || '';
-            }
-        }
-        
-        function downloadFile(taskId) {
-            fetch('/download/' + taskId)
-                .then(response => {
-                    const contentDisposition = response.headers.get("Content-Disposition");
-                    let filename = "processed_document.docx";
-                    if (contentDisposition) {
-                        const match = contentDisposition.match(/filename[^;=\n]*=(['"]?)(.*?)\1/);
-                        if (match) {
-                            let tmp_filename = match.input.split("filename=")[1]?.split(";")[0]?.trim();
-                            if (tmp_filename) {
-                                filename = tmp_filename.replace(/["']/g, '');
-                            }
-                        }
-                    }
-                    return response.blob().then(blob => ({blob, filename}));
-                })
-                .then(({blob, filename}) => {
-                    // Reset UI
-                    spinnerDiv.classList.add('visually-hidden');
-                    // uploadDocument.classList.remove('visually-hidden');
-                    typingIndicator.classList.add('d-none');
-                    progressContainer.classList.add('visually-hidden');
-                    
-                    // Hide progress container
-                    // const progressContainer = document.getElementById('progressContainer');
-                    // if (progressContainer) {
-                    //     progressContainer.classList.add('visually-hidden');
-                    // }
-                    
-                    // Create download link
-                    const url = window.URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = filename;
-                    document.body.appendChild(a);
-                    a.click();
-                    document.body.removeChild(a);
-                    window.URL.revokeObjectURL(url);
-                    
-                    // Clean up on server
-                    setTimeout(function() {
-                        fetch('/cleanup/' + taskId, {
-                            method: 'POST'
-                        });
-                    }, 3000);
-                })
-                .catch(error => {
-                    console.error('Error:', error);
-                    // showError('Error downloading the file.');
-                });
-        }
-    });
+});
 </script>
 
 {% endblock %}
