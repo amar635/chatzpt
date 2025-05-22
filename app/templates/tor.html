@@ -1,0 +1,305 @@
+{% extends 'base.html' %}
+{% block title %}Generate ToR{% endblock %}
+{% block content %}
+<!-- <style>
+    .spinner {
+        width: 50px;
+        height: 50px;
+        border: 0.25em solid rgba(255, 254, 254, 1);
+        border-radius: 50%;
+        border-top-color: #3498db;
+        animation: spin 2s linear infinite;
+    }
+
+    @keyframes spin {
+        0% {
+            transform: rotate(0deg);
+        }
+        100% {
+            transform: rotate(360deg);
+        }
+    }
+
+    .overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(0, 0, 0, 0.5);
+        z-index: 9999;
+    }
+</style> -->
+<div class="d-flex justify-content-center visually-hidden" id="spinnerDiv">
+    <div class="spinner position-absolute top-50"></div>
+    <div class="overlay"></div>
+</div>
+<div class="chat-messages" id="chatMessages"></div>
+<div id="typing-indicator" class="typing-indicator d-none mb-3">
+    <div class="typing-bubble">
+        <div class="dots">
+            <div class="dot"></div>
+            <div class="dot"></div>
+            <div class="dot"></div>
+        </div>
+    </div>
+</div>
+<div class="d-flex justify-content-center align-items-center visually-hidden" style="height:50vh" id="progressContainer">
+    <div class="alert alert-light text-center" role="alert">
+        <div class="progress" role="progressbar" aria-label="Example with label" aria-valuenow="25" aria-valuemin="0" aria-valuemax="100">
+            <div class="progress-bar" style="width: 25%" id="progressBar">25%</div>
+          </div>
+          <div class="container text-muted my-2" style="font-size:0.7rem;">
+        JiM is generating Terms of Reference... 
+        the document will be downloaded after generation. please wait and check the download folder!
+        <div class="my-2" id="statusText"></div>
+    </div>
+      </div>
+</div>
+<div class="fixed-bottom">
+    <div class="container">
+        <div class="justify-content-center">
+            <textarea class="form-control" rows="5" cols="100" placeholder="Enter your text here..." id="userInput"></textarea>
+            <div class="d-flex justify-content-center">
+                <button type="button" class="btn btn-primary my-3 mx-auto" name="submitBtn" id="submitBtn">
+                    Submit Context
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const submitBtn = document.getElementById('submitBtn');
+        const userInput = document.getElementById('userInput');
+        const selectModel = document.getElementById('selectModel');
+        const typingIndicator = document.getElementById('typing-indicator');
+        const spinnerDiv = document.getElementById('spinnerDiv');
+        const progressBar = document.getElementById('progressBar');
+        const progressContainer = document.getElementById('progressContainer');
+        const statusTextElement = document.getElementById('statusText');
+
+        function scrollToBottom() {
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        submitBtn.addEventListener('click', (event) => {
+            event.preventDefault();
+            const message = userInput.value.trim();
+                if (!message) return;
+            userInput.value = '';
+            const model_name = selectModel.options[selectModel.selectedIndex].text;
+                if (model_name ==='Select Model') return;
+            
+            typingIndicator.classList.remove('d-none');
+            spinnerDiv.classList.remove('visually-hidden');
+            progressContainer.classList.remove('visually-hidden');
+            scrollToBottom();
+
+            // Create message container but leave content empty
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'message bot-message message-enter m-2 block';
+            const messageContent = document.createElement('div');
+            messageContent.className = 'message-content markdown-content';
+            messageDiv.appendChild(messageContent);
+
+            // Add to DOM and apply animation
+            setTimeout(() => {
+                messageDiv.classList.add('message-enter-active');
+            }, 10);
+
+            // Create a new XMLHttpRequest object
+            const xhr = new XMLHttpRequest();
+
+            // Configure it: POST-request for the URL /tor
+            xhr.open("POST", "/tor", true);
+
+            // Set the Content-Type header to application/json
+            xhr.setRequestHeader("Content-Type", "application/json");
+
+            xhr.onload = function() {
+                if (xhr.status === 200) {
+                    const response = JSON.parse(xhr.responseText);
+                    const taskId = response.task_id;
+                    
+                    // Start monitoring progress via SSE
+                    startProgressMonitoring(taskId);
+                } else {
+                    // showError('Error during upload: ' + xhr.statusText);
+                }
+            };
+
+            // Set up a callback function to handle the server's response
+            xhr.onreadystatechange = function () {
+                if (xhr.readyState === XMLHttpRequest.DONE) {
+                    if (xhr.status === 200) {
+                        const response = JSON.parse(xhr.responseText);
+                        const taskId = response.task_id;
+                        
+                        // Start monitoring progress via SSE
+                        startProgressMonitoring(taskId);
+                    } else {
+                        console.error("Error:", xhr.status, xhr.statusText);
+                    }
+                }
+            };
+
+            xhr.onerror = function() {
+                // showError('A network error occurred during upload.');
+            };
+            // Create a JSON object to send
+            const jsonData = { message: message, model: model_name };
+
+            // Convert the JSON object to a string
+            const jsonString = JSON.stringify(jsonData);
+
+            // Send the JSON data to the server
+            xhr.send(jsonString);
+            // fetch('/tor', {
+            //         method: 'POST',
+            //         headers: {
+            //             'Content-Type': 'application/json',
+            //         },
+            //         body: JSON.stringify({ message: message, model: model_name })
+            //     }).then(response => {
+            //         // Hide typing indicator
+            //         typingIndicator.classList.add('d-none');
+            //         chatMessages.appendChild(messageDiv);
+                    
+            //         const reader = response.body.getReader();
+            //         const decoder = new TextDecoder();
+            //         let botMessage = '';
+                    
+            //         function readStream() {
+            //             return reader.read().then(({ done, value }) => {
+            //                 if (done) {
+            //                     // Apply markdown formatting
+            //                     messageContent.innerHTML = marked.parse(botMessage);
+            //                     return;
+            //                 }
+                            
+            //                 const chunk = decoder.decode(value);
+            //                 botMessage += chunk;
+            //                 messageContent.innerHTML = marked.parse(botMessage);
+            //                 scrollToBottom();
+                            
+            //                 return readStream();
+            //             });
+            //         }
+                    
+            //         return readStream();
+            //     })
+            //     .catch(error => {
+            //         console.error('Error:', error);
+            //         typingIndicator.classList.add('d-none');
+            //         // addMessage('Sorry, there was an error processing your request.', 'bot');
+            //     });
+
+        });
+    
+        let eventSource = null;
+
+        function startProgressMonitoring(taskId) {
+        // Close any existing event source
+        if (eventSource) {
+            eventSource.close();
+        }
+        
+        // Create a new event source for SSE
+        eventSource = new EventSource('/progress/' + taskId);
+        
+        eventSource.onmessage = function(event) {
+            const data = JSON.parse(event.data);
+            
+            if (data.error) {
+                // showError(data.error);
+                eventSource.close();
+            } else if (data.progress !== undefined) {
+                typingIndicator.classList.add('d-none');
+                updateProgress(data.progress, data.status || 'Processing...');
+
+                // If processing is complete, initiate download
+                if (data.progress === 100) {
+                    eventSource.close();
+                    setTimeout(function() {
+                        downloadFile(taskId);
+                    }, 1000); // Short delay to ensure processing is complete
+                }
+            }
+        };
+        
+        eventSource.onerror = function() {
+            // showError('Error connecting to server for progress updates.');
+            eventSource.close();
+        };
+    }
+
+        function updateProgress(percent, statusText) {
+            const progressBar = document.getElementById('progressBar');
+            // const statusTextElement = document.getElementById('statusText');
+            
+            if (progressBar ) {
+                progressBar.style.width = percent + '%';
+                progressBar.textContent = percent + '%';
+                progressBar.setAttribute('aria-valuenow', percent);
+                statusTextElement.textContent = statusText || '';
+            }
+        }
+        
+        function downloadFile(taskId) {
+            fetch('/download/' + taskId)
+                .then(response => {
+                    const contentDisposition = response.headers.get("Content-Disposition");
+                    let filename = "processed_document.docx";
+                    if (contentDisposition) {
+                        const match = contentDisposition.match(/filename[^;=\n]*=(['"]?)(.*?)\1/);
+                        if (match) {
+                            let tmp_filename = match.input.split("filename=")[1]?.split(";")[0]?.trim();
+                            if (tmp_filename) {
+                                filename = tmp_filename.replace(/["']/g, '');
+                            }
+                        }
+                    }
+                    return response.blob().then(blob => ({blob, filename}));
+                })
+                .then(({blob, filename}) => {
+                    // Reset UI
+                    spinnerDiv.classList.add('visually-hidden');
+                    // uploadDocument.classList.remove('visually-hidden');
+                    typingIndicator.classList.add('d-none');
+                    progressContainer.classList.add('visually-hidden');
+                    
+                    // Hide progress container
+                    // const progressContainer = document.getElementById('progressContainer');
+                    // if (progressContainer) {
+                    //     progressContainer.classList.add('visually-hidden');
+                    // }
+                    
+                    // Create download link
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = filename;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    window.URL.revokeObjectURL(url);
+                    
+                    // Clean up on server
+                    setTimeout(function() {
+                        fetch('/cleanup/' + taskId, {
+                            method: 'POST'
+                        });
+                    }, 3000);
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    // showError('Error downloading the file.');
+                });
+        }
+    });
+</script>
+
+{% endblock %}

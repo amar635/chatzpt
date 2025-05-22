@@ -1,0 +1,678 @@
+{% extends 'base.html' %}
+{% block title %} Chat {% endblock %}
+{% block content%}
+    <div class="container">
+        <div class="chat-messages" id="chatMessages">
+        <!--chat messages appear here-->
+        </div>
+        <div id="typing-indicator" class="typing-indicator d-none mb-3 ms-3">
+            <div class="typing-bubble">
+                <div class="dots">
+                    <div class="dot"></div>
+                    <div class="dot"></div>
+                    <div class="dot"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="fixed-bottom container mb-3">
+        <div class="chat-container container justify-content-center">
+            <div class="position-relative">
+                <textarea class="form-control pb-5" name="userInput" id="userInput" rows="2"></textarea>
+                <div class="container position-absolute bottom-0 end-0 p-0">
+                    <div class="d-flex justify-content-between mb-2">
+                        <div class="me-auto d-flex ms-2">
+                            <button type="submit" class="btn btn-sm btn-outline-secondary me-2" id="attachButton" 
+                            data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-title="Upload txt or docx"><i
+                                    class="fa-solid fa-paperclip" style="transform:rotate(-45deg);"></i></button>
+                            <div class="dropdown">
+                                <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button"
+                                    id="dropdownMenuButton" data-bs-toggle="dropdown" aria-expanded="false"
+                                    style="width:50px;">
+                                    <i class="fa-solid fa-mortar-pestle"></i>
+                                </button>
+                                <ul class="dropdown-menu" aria-labelledby="dropdownMenuButton" id="dropdownMenu">
+                                    {% for item in response_styles %}
+                                    <li>
+                                        <a class="dropdown-item d-flex align-items-center" href="#">
+                                            <span class="me-auto">{{item['name']}}</span>
+                                            <span class="ms-auto">{%if item['isSelected']%}<i
+                                                    class="fa-solid fa-check"></i>{% endif %}</span>
+                                        </a>
+                                    </li>
+                                    {% endfor %}
+                                </ul>
+                                <input type="hidden" id="selectStyle" name="selectStyle" value="">
+                            </div>
+                        </div>
+                        <div class="ms-auto d-flex me-2">
+                            <div class="dropdown me-2">
+                                <button class="btn btn-sm btn-outline-secondary dropdown-toggle rounded-5" type="button"
+                                    id="dropdownPreferredModel" data-bs-toggle="dropdown" aria-expanded="false">
+                                    Select Model
+                                </button>
+                                <ul class="dropdown-menu" aria-labelledby="dropdownPreferredModel" id="dropdownModel">
+                                    {% for item in models %}
+                                    <li>
+                                        <a href="#" class="dropdown-item">
+                                            <span style="font-size:0.8rem;" class="d-none">{{item['model']}}</span>
+                                            <span class="d-inline-block w-100">{{item['name']}}</span>
+                                            <span style="font-size:0.8rem;" class="d-block text-muted">{{item['description']}}</span>
+                                        </a>
+                                    </li>
+                                    {% endfor %}
+                                </ul>
+                                <input type="hidden" id="selectedModel" name="selectedModel" value="">
+                            </div>
+                            {#<!-- <select class="form-select me-2" aria-label="Default select example" id="preferredModel"
+                                style="width:170px;">
+                                <option selected disabled>Select Model</option>
+                                {% for item in models %}
+                                <option value="{{loop.index}}">{{item['name']}}</option>
+                                {% endfor %}
+                            </select> -->#}
+                            <button type="submit" class="btn btn-sm btn-secondary postion-relative" id="sendButton" disabled><i
+                                    class="fa-solid fa-location-arrow" style="transform: rotate(45deg);"></i></button>
+                        </div>
+                    </div>
+                    <div class="card bg-light visually-hidden fade show rounded-0 rounded-bottom-2" id="showFiles">
+
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="container text-center text-muted" style="font-size:0.8rem;">
+            JiM is a PP-AI chatbot. JiM can make mistake. Please verify the responses from reliable sources.
+        </div>
+        <input type="file" class="visually-hidden" id="fileInput" multiple>
+        <input type="hidden" name="selectedStyle" id="selectedStyle" value="normal">
+    </div>
+    {% block scripts %}
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const chatMessages = document.getElementById('chatMessages');
+            const textarea = document.getElementById('userInput');
+            const sendBtn = document.getElementById('sendButton');
+            const attachButton = document.getElementById('attachButton');
+            const preferredModel = document.getElementById('preferredModel');
+            const typingIndicator = document.getElementById('typing-indicator');
+            const fileInput = document.getElementById('fileInput');
+            const showFiles = document.getElementById('showFiles');
+            const dropdownMenuButton = document.getElementById('dropdownMenuButton');
+            const dropdownItems = document.getElementById('dropdownMenu').querySelectorAll('.dropdown-item');
+            const dropdownModelItems = document.querySelectorAll('#dropdownModel .dropdown-item');
+            const dropdownPreferredModel = document.getElementById('dropdownPreferredModel');
+            // responseStyles = JSON.parse(responseStyles.replace(/'/g, '"').replace(/True/g, 'true').replace(/False/g, 'false'));
+
+            let initialIndex = dropdownPreferredModel.textContent.trim();
+            let model_name = 'llama3:latest';
+            let selectedStyleInput = document.getElementById('selectedStyle');
+            let selectedModelInput = document.getElementById('selectedModel');
+            let fileName = '';
+            let isBotRunning = false;
+            // Generate a unique request ID for tracking this conversation
+            let currentRequestId = null;
+            // Add copy buttons to bot messages on page load
+            addCopyButtonsToBotMessages();
+            
+            // Observe for new bot messages being added
+            observeNewBotMessages();
+
+            // FUNCTIONS
+
+            // Tooltip script
+            const tooltipTriggerList = document.querySelectorAll('[data-bs-toggle="tooltip"]')
+            const tooltipList = [...tooltipTriggerList].map(tooltipTriggerEl => new bootstrap.Tooltip(tooltipTriggerEl))
+            // Function to delete file 
+            function deleteFile(fileName, event) {
+                fetch('/delete', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ file_name: fileName })
+                })
+                    .then(response => {
+                        if (response.ok) {
+                            return response.json();
+                        } else {
+                            throw new Error('Network response was not ok');
+                        }
+                    })
+                    .then(data => {
+                        setTimeout(() => {
+                            event.preventDefault();
+                            showFiles.classList.add('visually-hidden');
+                            showFiles.innerHTML = '';
+                            textarea.style.height = 'auto';
+                            textarea.style.height = textarea.scrollHeight + 'px';
+                        }, 200);
+                    })
+                    .catch(error => {
+                        console.error('Error deleting file:', error);
+                        // Handle the error here
+                    });
+            }
+
+            // Function to upload file
+            function uploadFile(fileName, formData) {
+                fetch('/upload', {
+                    method: 'POST',
+                    body: formData
+                })
+                    .then(response => {
+                        if (response.ok) {
+                            return response.json();
+                        } else {
+                            throw new Error('Network response was not ok');
+                        }
+                    })
+                    .then(data => {
+                        const div = `
+                            <div class="d-flex m-2">
+                                <div class="alert alert-secondary alert-dismissible fade show m-0" role="alert">
+                                    <strong>${fileName}</strong>
+                                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                                </div>
+                            </div>
+                        `;
+                        showFiles.innerHTML += div;
+                        showFiles.classList.remove('visually-hidden');
+                        // event listener to handle close button click
+                        document.querySelector('.btn-close').addEventListener('click', (event) => {
+                            deleteFile(fileName, event);
+                        })
+                        // Set initial height
+                        showFiles.setAttribute('style', 'height: auto; overflow-y: hidden;');
+
+                        // Reset height to auto to get the correct scrollHeight
+                        showFiles.style.height = 'auto';
+                        textarea.style.height = 'auto';
+
+                        // Set the height to match content (scrollHeight)
+                        showFiles.style.height = showFiles.scrollHeight + 'px';
+                        showFiles.style.transition = 'height 10s ease-in-out';
+                        textarea.style.height = textarea.scrollHeight + showFiles.scrollHeight + 'px';
+                        // Handle the response data
+                        console.log('File uploaded successfully:', data);
+                        // You can also display a success message or update the UI here
+                    })
+                    .catch(error => {
+                        console.error('Error uploading file:', error);
+                        // Handle the error here
+                    });
+
+            }
+
+            // Function to handle file upload
+            function handleFiles(files) {
+                if (files.length > 0) {
+                    const formData = new FormData();
+                    for (let i = 0; i < files.length; i++) {
+                        formData.append('file', files[i]);
+                    }
+                    // Display file name in the chat
+                    fileName = files[0].name;
+                    const fileSize = files[0].size;
+                    const fileType = files[0].name.split('.').pop().toLowerCase();
+
+                    // Check file type
+                    if (fileType !== 'txt' && fileType !== 'pdf' && fileType !== 'docx') {
+                        alert('Invalid file type. Only .txt, .pdf, and .docx are allowed.');
+                        return;
+                    }
+
+                    // Check file Size
+                    // if (fileSize > 1048576) {
+                    if(fileSize > 10485760){
+                        alert('File size exceeds 10MB');
+                        return;
+                    }
+
+                    if (fileName) {
+                        uploadFile(fileName, formData);
+                    }
+                }
+            }
+
+            // Function to scroll to the bottom of the chat messages
+            function scrollToBottom() {
+                chatMessages.scrollTop = chatMessages.scrollHeight;
+            }
+
+            // Function to add a message to the chan messages
+            function addMessage(content, sender) {
+                const messageDiv = document.createElement('div');
+                messageDiv.className = `ms-auto message ${sender}-message message-enter m-2 block`;
+
+                const messageContent = document.createElement('div');
+                messageContent.className = 'message-content';
+                messageContent.textContent = content;
+
+                messageDiv.appendChild(messageContent);
+                chatMessages.appendChild(messageDiv);
+
+                // Trigger animation
+                setTimeout(() => {
+                    messageDiv.classList.add('message-enter-active');
+                }, 10);
+
+                scrollToBottom();
+            }
+
+            // Function to handle response completion
+            function responseComplete() {
+                isProcessing = false;
+                sendButton.classList.remove('processing');
+                currentRequestId = null;
+                sendBtn.innerHTML = `<i class="fa-solid fa-location-arrow" style="transform: rotate(45deg);"></i>`;
+            }
+
+            // Function to handle user messages
+            function sendMessage() {
+                // change the send button icon to stop
+                const message = userInput.value.trim();
+                if (!message) return;
+                if (selectedModelInput.value){
+                    model_name = selectedModelInput.value;
+                }
+                // const model_name = preferredModel.options[preferredModel.selectedIndex].text;
+                if (model_name === 'Select Model') return;
+                // Display user message
+                addMessage(message, 'user');
+                userInput.value = '';
+                adjustHeight();
+                // Show typing indicator
+                typingIndicator.classList.remove('d-none');
+                scrollToBottom();
+
+                // Create message container but leave content empty
+                const messageDiv = document.createElement('div');
+                messageDiv.className = 'message bot-message message-enter m-2 block';
+                const messageContent = document.createElement('div');
+                messageContent.className = 'message-content markdown-content';
+                messageDiv.appendChild(messageContent);
+                if (fileInput.files[0] === undefined)
+                    fileName = '';
+                else {
+                    fileName = fileInput.files[0].name;
+                }
+                // Add to DOM and apply animation
+                setTimeout(() => {
+                    messageDiv.classList.add('message-enter-active');
+                }, 10);
+
+                // Send message to server
+                fetch('/bot', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ message: message, model: model_name, style: selectedStyleInput.value, fileName: fileName })
+                })
+                    .then(response => {
+                        // Store the request ID from headers
+                        currentRequestId = response.headers.get('X-Request-ID');
+                        // Hide typing indicator
+                        typingIndicator.classList.add('d-none');
+                        chatMessages.appendChild(messageDiv);
+
+                        const reader = response.body.getReader();
+                        const decoder = new TextDecoder();
+                        let botMessage = '';
+
+                        function readStream() {
+                            return reader.read().then(({ done, value }) => {
+                                if (done) {
+                                    isBotRunning = false;
+                                    toggleSendBtn();
+                                    responseComplete();
+                                    // Apply markdown formatting
+                                    messageContent.innerHTML = marked.parse(botMessage);
+                                    return;
+                                }
+                                
+
+                                const chunk = decoder.decode(value);
+                                if (chunk.startsWith("\n\n_" + currentRequestId + ":")){
+                                    isBotRunning = false;
+                                    toggleSendBtn();
+                                    responseComplete();
+                                } else{
+                                    botMessage += chunk;
+                                    messageContent.innerHTML = marked.parse(botMessage);
+                                    scrollToBottom();
+                                }
+
+                                return readStream();
+                            });
+                        }
+
+                        return readStream();
+                    })
+                    .catch(error => {
+                        console.error('Error:', error);
+                        typingIndicator.classList.add('d-none');
+                        // addMessage('Sorry, there was an error processing your request.', 'bot');
+                    });
+            }
+
+            // Function to stop or interupt the bot
+            function stopBot(){
+                fetch('/stop', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ request_id: currentRequestId })
+                })
+                    .then(response => {
+                        if (response.ok) {
+                            console.log('Bot stopped successfully');
+                        } else {
+                            console.error('Error stopping the bot');
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error:', error);
+                    });
+
+            }
+            
+            // Function to toggle send button
+            function toggleSendBtn(){
+                if (textarea.value==='' || dropdownPreferredModel.textContent.trim() === 'Select Model'){
+                    sendBtn.setAttribute('disabled', true);
+                    sendBtn.classList.add('btn-secondary');
+                    sendBtn.classList.remove('btn-primary');
+                } else {
+                    sendBtn.removeAttribute('disabled');
+                    sendBtn.classList.remove('btn-secondary');
+                    sendBtn.classList.add('btn-primary');
+                }
+            }
+            
+
+            // Function to add copy buttons to bot messages
+            function addCopyButtonsToBotMessages() {
+            // Select only bot message content elements
+            const botMessageContents = document.querySelectorAll('.bot-message .message-content');
+            
+            botMessageContents.forEach(content => {
+                // Only add copy button if it doesn't already have one
+                if (!content.parentElement.querySelector('.copy-button')) {
+                addCopyButton(content);
+                }
+            });
+            }
+
+            // Function to add a copy button to a message
+            function addCopyButton(messageContent) {
+            const copyButton = document.createElement('button');
+            copyButton.innerHTML = '<i class="fas fa-copy"></i>'; // Using FontAwesome
+            copyButton.className = 'copy-button';
+            copyButton.title = 'Copy message';
+            copyButton.style.cssText = `
+                position: absolute;
+                bottom: 0px;
+                left: 8px;
+                background: transparent;
+                border: none;
+                font-size: 14px;
+                cursor: pointer;
+                opacity: 0.6;
+                display: none;
+            `;
+            
+            // Show button on hover
+            messageContent.parentElement.addEventListener('mouseenter', () => {
+                copyButton.style.display = 'block';
+            });
+            
+            messageContent.parentElement.addEventListener('mouseleave', () => {
+                copyButton.style.display = 'none';
+            });
+            
+            copyButton.addEventListener('click', (e) => {
+                e.stopPropagation();
+                
+                // Get text content (handle both plain text and markdown)
+                let textToCopy;
+                if (messageContent.classList.contains('markdown-content')) {
+                textToCopy = messageContent.innerText;
+                } else {
+                textToCopy = messageContent.textContent;
+                }
+                
+                // Copy to clipboard
+                navigator.clipboard.writeText(textToCopy)
+                .then(() => {
+                    // Show feedback
+                    const originalText = copyButton.innerHTML;
+                    copyButton.innerHTML = '<i class="fas fa-check"></i>';
+                    copyButton.style.opacity = '1';
+                    
+                    setTimeout(() => {
+                    copyButton.innerHTML = originalText;
+                    copyButton.style.opacity = '0.6';
+                    }, 1500);
+                })
+                .catch(err => {
+                    console.error('Failed to copy text: ', err);
+                });
+            });
+            
+            // Add button to message container
+            messageContent.parentElement.style.position = 'relative';
+            messageContent.parentElement.appendChild(copyButton);
+            }
+
+            // Function to observe new bot messages
+            function observeNewBotMessages() {
+            // Create a mutation observer to detect when new messages are added
+            const chatContainer = document.getElementById('chatMessages');
+            
+            if (!chatContainer) return;
+            
+            const observer = new MutationObserver((mutations) => {
+                let needsUpdate = false;
+                
+                mutations.forEach((mutation) => {
+                if (mutation.type === 'childList' && mutation.addedNodes.length > 0) {
+                    // Check if any of the added nodes are bot messages or contain bot messages
+                    mutation.addedNodes.forEach(node => {
+                    if (node.nodeType === 1) { // Element node
+                        if (node.classList && node.classList.contains('bot-message')) {
+                        needsUpdate = true;
+                        } else if (node.querySelector && node.querySelector('.bot-message')) {
+                        needsUpdate = true;
+                        }
+                    }
+                    });
+                }
+                });
+                
+                if (needsUpdate) {
+                addCopyButtonsToBotMessages();
+                }
+            });
+            
+            // Start observing
+            observer.observe(chatContainer, {
+                childList: true,
+                subtree: true
+            });
+            }
+            
+
+            // Function to adjust height based on content
+            const adjustHeight = () => {
+                // Reset height to auto to get the correct scrollHeight
+                textarea.style.height = 'auto';
+
+                // Set the height to match content (scrollHeight)
+                if (fileName === '') {
+                    textarea.style.height = textarea.scrollHeight + 'px';
+                } else {
+                    textarea.style.height = textarea.scrollHeight + showFiles.scrollHeight + 'px';
+                }
+            };
+
+            // INITIALIZATION
+
+            // Set initial height
+            textarea.setAttribute('style', 'height: auto; overflow-y: hidden;');
+
+            // Optional: Set a minimum height if needed
+            textarea.style.minHeight = '56px'; // Approx height for 1 line
+
+            // Optional: Set a maximum height if needed
+            textarea.style.maxHeight = '300px';
+
+            // Set initial height on page load
+            adjustHeight();
+
+            //EVENT LISTENERS
+
+            // event listener to adjust the height of the textarea
+            textarea.addEventListener('keyup', (event) => {
+                // adjustHeight();
+                toggleSendBtn();
+                if (event.keyCode == 13 && event.shiftKey) {
+                    event.preventDefault();
+                    textarea.value += '\n';
+                } else if (event.keyCode == 13) {
+                    if (dropdownPreferredModel.textContent.trim() === 'Select Model') {
+                        event.preventDefault();
+                        return;
+                    }
+                    sendMessage();
+                } 
+                adjustHeight();
+                // else {
+                //     event.preventDefault();
+                //     // adjustHeight();
+                // }
+
+
+
+
+
+            });
+
+            // event listener to handle drag and drop
+            textarea.addEventListener('dragover', (event) => {
+                event.preventDefault();
+                textarea.style.backgroundColor = 'rgb(240,240,240,0.3)';
+            });
+
+            textarea.addEventListener('dragleave', (event) => {
+                event.preventDefault();
+                textarea.style.backgroundColor = 'rgb(240,240,240,0)';;
+            });
+
+            attachButton.addEventListener('click', () => {
+                fileInput.click();
+            });
+
+            // event listener to hanndle file input
+            fileInput.addEventListener('change', () => {
+                const files = fileInput.files;
+                handleFiles(files);
+            });
+
+            // event listener to handle send button click
+            sendBtn.addEventListener('click', (event) => {
+                event.preventDefault();
+                if (isBotRunning) {
+                    stopBot();
+                } else {
+                    isBotRunning = true;
+                    sendBtn.innerHTML = `
+                        <i class="fa-solid fa-stop z-1"></i>
+                        <div class="spinner-border text-light position-absolute me-2" role="status" style="bottom:0.7rem; right:0.2rem;opacity:0.6; animation:1s linear infinite spinner-border">
+                        <span class="visually-hidden">Loading...</span>
+                        </div>
+                    `;
+                    sendMessage();
+                }
+            });
+
+            // event listener to handle dropdown menu button click
+            dropdownMenuButton.addEventListener('click', (event) => {
+                event.preventDefault();
+                dropdownItems.forEach(item => {
+                    item.addEventListener('click', function (event) {
+                        event.preventDefault();
+                        // Remove check icon from all items
+                        dropdownItems.forEach(dropItem => {
+                            const checkSpan = dropItem.querySelector('.ms-auto');
+                            checkSpan.innerHTML = '';
+                        });
+                        // Add check icon to the selected item
+                        const clickSpan = this.querySelector('.ms-auto');
+                        clickSpan.innerHTML = '<i class="fa-solid fa-check"></i>';
+                        selectedStyle = this.querySelector('.me-auto').textContent;
+                        selectedStyleInput.value = selectedStyle;
+                        if (selectedStyle.toLowerCase() === 'normal') {
+                            dropdownMenuButton.innerHTML = `<i class="fa-solid fa-mortar-pestle"></i>`;
+                            dropdownMenuButton.setAttribute('style', 'width:50px;');
+                        } else {
+                            dropdownMenuButton.innerHTML = `<i class="fa-solid fa-mortar-pestle"></i> ${this.querySelector('.me-auto').textContent}`;
+                            dropdownMenuButton.removeAttribute('style');
+                        }
+                        // console.log(this.querySelector('.me-auto').textContent);
+                    })
+                })
+            });
+
+            // event listener to handle dropdown menu button click
+            dropdownModelItems.forEach(item => {
+                    item.addEventListener('click', function(e) {
+                        e.preventDefault(); // Prevent the default anchor behavior
+                        
+                        // Get the model name from the first span
+                        const modelName = this.querySelector('span.d-none').textContent;
+                        const displayName = this.querySelector('span.d-inline-block').textContent;
+                        
+                        // Update the dropdown button text
+                        dropdownPreferredModel.textContent = displayName;
+                        toggleSendBtn();
+                        
+                        // Store the selected model in hidden input
+                        selectedModelInput.value = modelName
+                        model_name = modelName;
+                    });
+                });
+            
+            // event listener to handle model selection
+            // preferredModel.addEventListener('change', (event) => {
+            //     event.preventDefault();
+            //     if (preferredModel.selectedIndex===0){
+            //         // do nothing
+            //     } else {
+            //         preferredModel.setAttribute('disabled', true);
+            //         toggleSendBtn();
+            //     }
+            //     model_name = preferredModel.options[preferredModel.selectedIndex].text;
+            //     if (initialIndex !== 'Select Model') {
+            //         if (confirm('The page will be reloaded. All the chat messages will be lost. Are you sure?')) {
+            //             // Reload it!
+            //             window.location.href = location.href;
+            //         }
+            //     }
+            //     initialIndex = model_name;
+            // });
+
+        })
+    
+        // Simple Copy Functionality for Bot Messages Only
+
+   
+document.addEventListener('DOMContentLoaded', function() {
+  
+});
+</script>
+    {% endblock %}
+{% endblock %}

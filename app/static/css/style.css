@@ -1,0 +1,317 @@
+:root{
+  --bs-primary-rgb: 190, 3, 3 !important;
+  --bs-btn-bg: #ad0303 !important;
+}
+.btn-primary{
+  background-color: #ad0303 !important;
+  border-color: #ad0303 !important;
+}
+/*COUNTDOWN TIMER*/
+.base-timer {
+  position: relative;
+  width: 30px;
+  height: 30px;
+}
+
+.base-timer__svg {
+  transform: scaleX(-1);
+}
+
+.base-timer__circle {
+  fill: none;
+  stroke: none;
+}
+
+.base-timer__path-elapsed {
+  stroke-width: 7px;
+  stroke: grey;
+}
+
+.base-timer__path-remaining {
+  stroke-width: 7px;
+  stroke-linecap: round;
+  transform: rotate(90deg);
+  transform-origin: center;
+  transition: 1s linear all;
+  fill-rule: nonzero;
+  stroke: currentColor;
+}
+
+.base-timer__path-remaining.green {
+  color: rgb(65, 184, 131);
+}
+
+.base-timer__path-remaining.orange {
+  color: orange;
+}
+
+.base-timer__path-remaining.red {
+  color: red;
+}
+
+.base-timer__label {
+  position: absolute;
+  width: 30px;
+  height: 30px;
+  top: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+}
+
+/*END COUNTDOWN TIMER*/
+
+/* Chat container styles */
+#chatMessages {
+  width: 100%;
+  gap: 10px;
+  max-height: 70vh;
+  overflow-y: scroll;
+  padding: 10px;
+  -ms-overflow-style: none;  /* IE and Edge */
+  scrollbar-width: none;  /* Firefox */
+}
+
+#chatMessages ::-webkit-scrollbar {
+  display: none;
+}
+
+.chat-container{
+  max-width: 900px;;
+}
+
+/* Message bubble styles */ 
+.message {
+  margin-bottom: 15px;
+  max-width: 80%;
+  clear: both;
+}
+
+.user-message {
+  white-space: pre-wrap;
+  display:flex;
+  justify-content: flex-end;
+  overflow-wrap: break-word; 
+  /* margin-right: auto; 
+  float: right; 
+  max-width: 80%;*/
+}
+
+.bot-message {
+  display:flex;
+  justify-content: flex-start;
+  overflow-wrap: break-word; 
+  /* float: left; 
+  max-width: 80%; */
+}
+
+.message-content {
+  padding: 10px 15px;
+  border-radius: 18px;
+  /* max-width: 80%; */
+  display: inline-block;
+  word-wrap: break-word;
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+.user-message .message-content {
+  /* background-color: #007bff;
+  color: white; */
+  border-bottom-right-radius: 5px;
+  border: 1px solid #b50303;
+  color: #b50303;
+  border-bottom-right-radius: 5px;
+}
+
+.bot-message .message-content {
+  background-color: #e9ecef;
+  color: #212529;
+  border-bottom-left-radius: 5px;
+}
+
+/* Typing indicator styles */
+.typing-indicator {
+  display:flex;
+  justify-content: flex-start;
+  align-items: center;
+}
+
+.typing-bubble {
+  background-color: #e9ecef;
+  padding: 10px 15px;
+  border-radius: 18px;
+  border-bottom-left-radius: 5px;
+  display: inline-block;
+  /* margin-bottom: 15px; */
+}
+
+.dots {
+  display: flex;
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: #adb5bd;
+  margin-right: 4px;
+  animation: bounce 1.5s infinite;
+}
+
+.dot:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.dot:nth-child(3) {
+  animation-delay: 0.4s;
+  margin-right: 0;
+}
+
+@keyframes bounce {
+
+  0%,
+  80%,
+  100% {
+    transform: translateY(0);
+  }
+
+  40% {
+    transform: translateY(-8px);
+  }
+}
+
+/* Animation for new messages */
+.message-enter {
+  opacity: 0;
+  transform: translateY(20px);
+}
+
+.message-enter-active {
+  opacity: 1;
+  transform: translateY(0);
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+/* Scroll to bottom button */
+.scroll-bottom {
+  position: absolute;
+  bottom: 20px;
+  right: 30px;
+  background-color: rgba(0, 123, 255, 0.7);
+  color: white;
+  border: none;
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background-color 0.3s ease;
+}
+
+.scroll-bottom:hover {
+  background-color: rgba(0, 123, 255, 1);
+}
+
+/* DRAG and DROP */
+.drop-area {
+  border: 1px dashed #ccc;
+  border-radius: 10px;
+  padding: 100px;
+  cursor: pointer;
+  transition: background-color 0.3s ease;
+}
+
+.drop-area.drag-over {
+  background-color: #f0f8ff;
+  border-color: #3498db;
+}
+
+.drop-area:active {
+  background-color: #e0f7fa;
+  border-color: #2980b9;
+}
+
+/* Bootstrap Changes */
+.form-control:focus {
+  color: var(--bs-body-color);
+  background-color: var(--bs-body-bg);
+  border-color:#f99c9c;
+  outline:0;
+  box-shadow: 0 0 0 .25rem rgba(253, 13, 13, 0.25);
+}
+.spinner-border{
+  --bs-spinner-width: 1.5rem;
+  --bs-spinner-height: 1.5rem;
+}
+
+/* COPY TO CLIPBOARD*/
+/* Styles for bot message copy functionality */
+
+/* Message container position */
+.bot-message {
+  position: relative;
+}
+
+/* Copy button styling */
+.copy-button {
+  position: absolute;
+  bottom: 0px;
+  left: 8px;
+  background-color: rgba(255, 255, 255, 0.8);
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: none;
+  z-index: 10;
+}
+
+/* Show button on hover */
+.bot-message:hover .copy-button {
+  display: block;
+}
+
+/* Button hover effect */
+.copy-button:hover {
+  background-color: #f5f5f5;
+}
+
+/* Success state */
+.copy-button.success {
+  background-color: #dff0d8;
+  color: #3c763d;
+}
+
+/* SPINNER */
+.spinner {
+        width: 50px;
+        height: 50px;
+        border: 0.25em solid rgba(255, 254, 254, 1);
+        border-radius: 50%;
+        border-top-color: #3498db;
+        animation: spin 2s linear infinite;
+    }
+
+    @keyframes spin {
+        0% {
+            transform: rotate(0deg);
+        }
+        100% {
+            transform: rotate(360deg);
+        }
+    }
+
+    .overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(0, 0, 0, 0.5);
+        z-index: 9999;
+    }
